@@ -402,7 +402,10 @@ function renderPreviews() {
     item.className = 'preview-item';
 
     const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
+    // FileReader + dataURL = plus fiable que createObjectURL sur mobile Samsung
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
 
     const btn = document.createElement('button');
     btn.className = 'remove-btn';
