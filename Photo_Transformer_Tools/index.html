@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Photo Tools">
+  <link rel="manifest" href="manifest.json">
+  <title>Photo Transformer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg:        #0a0a0a;
+      --bg2:       #1c1c1e;
+      --bg3:       #2c2c2e;
+      --accent:    #0a84ff;
+      --text:      #ffffff;
+      --text2:     rgba(235,235,245,0.8);
+      --text3:     rgba(235,235,245,0.6);
+      --sep:       #38383a;
+      --green:     #30d158;
+      --radius:    12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 16px 20px 12px;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    header h1     { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; text-align: center; }
+    header .sub   { font-size: 12px; color: var(--text3); text-align: center; margin-top: 2px; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px 16px calc(32px + env(safe-area-inset-bottom));
+    }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 1.5px dashed var(--sep);
+      border-radius: var(--radius);
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--bg2);
+      margin-bottom: 12px;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone.drag-over { border-color: var(--accent); background: rgba(10,132,255,.08); }
+    .drop-zone .icon  { font-size: 38px; display: block; margin-bottom: 10px; }
+    .drop-zone .title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .drop-zone .hint  { font-size: 13px; color: var(--text3); }
+    #fileInput { display: none; }
+
+    /* ── Preview grid ── */
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-bottom: 16px;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .preview-item {
+      aspect-ratio: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg3);
+    }
+    .preview-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .remove-btn {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 20px; height: 20px;
+      background: rgba(0,0,0,.65);
+      border: none;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Card ── */
+    .card { background: var(--bg2); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+    .card-header {
+      padding: 14px 16px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    /* ── Toggle row ── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-top: 0.5px solid var(--sep);
+    }
+    .toggle-info { flex: 1; }
+    .toggle-label { font-size: 16px; font-weight: 400; margin-bottom: 2px; }
+    .toggle-desc  { font-size: 12px; color: var(--text3); }
+
+    /* iOS toggle */
+    .toggle { position: relative; width: 51px; height: 31px; flex-shrink: 0; margin-left: 12px; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .tog-track {
+      position: absolute; inset: 0;
+      background: var(--bg3);
+      border-radius: 31px;
+      transition: background .2s;
+      cursor: pointer;
+    }
+    .tog-track::before {
+      content: '';
+      position: absolute;
+      width: 27px; height: 27px;
+      left: 2px; top: 2px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform .2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,.3);
+    }
+    .toggle input:checked + .tog-track { background: var(--green); }
+    .toggle input:checked + .tog-track::before { transform: translateX(20px); }
+
+    /* ── Intensity ── */
+    .intensity-wrap {
+      padding: 12px 16px 16px;
+      border-top: 0.5px solid var(--sep);
+    }
+    .intensity-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .intensity-label { font-size: 16px; }
+    .intensity-val   { font-size: 16px; font-weight: 600; color: var(--accent); }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--bg3);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px; height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0,0,0,.4);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0,0,0,.4);
+      border: none;
+      cursor: pointer;
+    }
+
+    /* ── Button ── */
+    .btn-primary {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: -.3px;
+      transition: opacity .15s;
+    }
+    .btn-primary:active   { opacity: .7; }
+    .btn-primary:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Progress ── */
+    .progress-wrap { margin-top: 16px; display: none; }
+    .progress-wrap.visible { display: block; }
+    .prog-bg   { background: var(--bg2); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 8px; }
+    .prog-fill { height: 100%; background: var(--accent); border-radius: 4px; width: 0%; transition: width .15s; }
+    .prog-text { font-size: 13px; color: var(--text3); text-align: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Photo Transformer</h1>
+  <div class="sub">Rend chaque photo unique · 100 % local</div>
+</header>
+
+<div class="container">
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="icon">🖼️</span>
+    <div class="title">Ajouter des photos</div>
+    <div class="hint">Appuie ou glisse des images ici</div>
+    <input type="file" id="fileInput" accept="image/*" multiple>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-grid" id="previewGrid"></div>
+
+  <!-- Transformations -->
+  <div class="card">
+    <div class="card-header">Transformations</div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Resize léger</div>
+        <div class="toggle-desc">±2–4 % aléatoire</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-resize" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Rotation légère</div>
+        <div class="toggle-desc">±0.5–2°</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-rotate" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Bruit RGB</div>
+        <div class="toggle-desc">Pixels aléatoires modifiés</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-noise" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Flip horizontal</div>
+        <div class="toggle-desc">Miroir aléatoire (50 % de chances)</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-flip" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Saturation</div>
+        <div class="toggle-desc">±5–10 % variation</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-saturation" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Luminosité</div>
+        <div class="toggle-desc">±3–5 % variation</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-brightness" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Métadonnées EXIF</div>
+        <div class="toggle-desc">Supprime les vraies, injecte appareil + date aléatoires</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-exif" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Renommage aléatoire</div>
+        <div class="toggle-desc">IMG_XXXX, DSC_XXXX, P_XXXXXXXX…</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="t-rename" checked>
+        <span class="tog-track"></span>
+      </label>
+    </div>
+
+    <div class="intensity-wrap">
+      <div class="intensity-head">
+        <span class="intensity-label">Intensité</span>
+        <span class="intensity-val" id="intensityDisplay">5</span>
+      </div>
+      <input type="range" id="intensitySlider" min="1" max="10" value="5">
+    </div>
+  </div>
+
+  <!-- Action -->
+  <button class="btn-primary" id="processBtn" disabled>Transformer &amp; Télécharger</button>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="prog-bg"><div class="prog-fill" id="progressFill"></div></div>
+    <div class="prog-text" id="progressText"></div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let files = [];
+
+// ── DOM ────────────────────────────────────────────────────────────────────
+const dropZone        = document.getElementById('dropZone');
+const fileInput       = document.getElementById('fileInput');
+const previewGrid     = document.getElementById('previewGrid');
+const processBtn      = document.getElementById('processBtn');
+const intensitySlider = document.getElementById('intensitySlider');
+const intensityDisplay= document.getElementById('intensityDisplay');
+const progressWrap    = document.getElementById('progressWrap');
+const progressFill    = document.getElementById('progressFill');
+const progressText    = document.getElementById('progressText');
+
+// ── File handling ──────────────────────────────────────────────────────────
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  addFiles(Array.from(e.target.files));
+  fileInput.value = '';
+});
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')));
+});
+
+function addFiles(newFiles) {
+  files = [...files, ...newFiles];
+  renderPreviews();
+  processBtn.disabled = files.length === 0;
+}
+
+function removeFile(idx) {
+  files.splice(idx, 1);
+  renderPreviews();
+  processBtn.disabled = files.length === 0;
+}
+
+function renderPreviews() {
+  previewGrid.innerHTML = '';
+  files.forEach((file, i) => {
+    const item = document.createElement('div');
+    item.className = 'preview-item';
+
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+
+    const btn = document.createElement('button');
+    btn.className = 'remove-btn';
+    btn.textContent = '×';
+    btn.onclick = e => { e.stopPropagation(); removeFile(i); };
+
+    item.append(img, btn);
+    previewGrid.appendChild(item);
+  });
+}
+
+// ── Intensity display ──────────────────────────────────────────────────────
+intensitySlider.addEventListener('input', () => {
+  intensityDisplay.textContent = intensitySlider.value;
+});
+
+// ── Settings ───────────────────────────────────────────────────────────────
+function getSettings() {
+  return {
+    resize:     document.getElementById('t-resize').checked,
+    rotate:     document.getElementById('t-rotate').checked,
+    noise:      document.getElementById('t-noise').checked,
+    flip:       document.getElementById('t-flip').checked,
+    saturation: document.getElementById('t-saturation').checked,
+    brightness: document.getElementById('t-brightness').checked,
+    exif:       document.getElementById('t-exif').checked,
+    rename:     document.getElementById('t-rename').checked,
+    intensity:  parseInt(intensitySlider.value, 10),
+  };
+}
+
+// ── Math helpers ───────────────────────────────────────────────────────────
+const rand  = (lo, hi)  => Math.random() * (hi - lo) + lo;
+const clamp = v          => Math.round(Math.min(255, Math.max(0, v)));
+
+function rgbToHsl(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  switch (max) {
+    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+    case g: h = ((b - r) / d + 2) / 6; break;
+    default: h = ((r - g) / d + 4) / 6;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) return [l, l, l];
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hue2rgb(p, q, h + 1/3), hue2rgb(p, q, h), hue2rgb(p, q, h - 1/3)];
+}
+
+function hue2rgb(p, q, t) {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1/6) return p + (q - p) * 6 * t;
+  if (t < 1/2) return q;
+  if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+  return p;
+}
+
+// ── EXIF injection (pure JS, no library) ──────────────────────────────────
+const DEVICES = [
+  { make: 'Apple',    models: ['iPhone 13', 'iPhone 14', 'iPhone 14 Pro', 'iPhone 15', 'iPhone 15 Pro Max'] },
+  { make: 'Samsung',  models: ['SM-G991B', 'SM-G998B', 'SM-S906B', 'SM-S918B', 'SM-A546B'] },
+  { make: 'Google',   models: ['Pixel 6a', 'Pixel 7', 'Pixel 7 Pro', 'Pixel 8', 'Pixel 8 Pro'] },
+  { make: 'OnePlus',  models: ['CPH2251', 'CPH2399', 'CPH2411', 'CPH2449'] },
+  { make: 'Xiaomi',   models: ['2201123G', '22071212AG', 'M2012K11AG', '2201122G'] },
+];
+
+function randomDevice() {
+  const d = DEVICES[Math.floor(Math.random() * DEVICES.length)];
+  return { make: d.make, model: d.models[Math.floor(Math.random() * d.models.length)] };
+}
+
+function randomExifDate() {
+  const d = new Date(Date.now() - Math.random() * 365 * 24 * 3600 * 1000);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}:${p(d.getMonth()+1)}:${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function strBytes(s) {
+  const b = new Uint8Array(s.length + 1); // +1 = null terminator
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+
+// Builds a minimal JPEG APP1 EXIF segment (TIFF/LE, 3 tags: Make, Model, DateTime)
+function buildExifApp1(make, model, dateTime) {
+  const makeB  = strBytes(make);
+  const modelB = strBytes(model);
+  const dtB    = strBytes(dateTime); // "YYYY:MM:DD HH:MM:SS\0" = 20 bytes
+
+  // TIFF layout (little-endian):
+  //   0x00  TIFF header         8 bytes
+  //   0x08  IFD0 entry count    2 bytes  (= 3)
+  //   0x0A  3 entries × 12 B   36 bytes
+  //   0x2E  next IFD            4 bytes  (= 0)
+  //   0x32  value area          starts here
+  const valueBase = 8 + 2 + 3 * 12 + 4; // = 50
+
+  const makeOff  = valueBase;
+  const modelOff = makeOff  + makeB.length;
+  const dtOff    = modelOff + modelB.length;
+  const tiffLen  = dtOff    + dtB.length;
+
+  const tiff = new Uint8Array(tiffLen);
+  const dv   = new DataView(tiff.buffer);
+  let p = 0;
+
+  // TIFF header
+  tiff[p++] = 0x49; tiff[p++] = 0x49; // 'II' = little-endian
+  tiff[p++] = 0x2A; tiff[p++] = 0x00; // TIFF magic 42
+  dv.setUint32(p, 8, true); p += 4;   // IFD0 starts at byte 8
+
+  dv.setUint16(p, 3, true); p += 2;   // 3 IFD entries
+
+  const writeEntry = (tag, count, offset) => {
+    dv.setUint16(p, tag,    true); p += 2;
+    dv.setUint16(p, 2,      true); p += 2; // type = ASCII
+    dv.setUint32(p, count,  true); p += 4;
+    dv.setUint32(p, offset, true); p += 4; // value offset in TIFF
+  };
+  writeEntry(0x010F, makeB.length,  makeOff);   // Make
+  writeEntry(0x0110, modelB.length, modelOff);  // Model
+  writeEntry(0x0132, dtB.length,    dtOff);     // DateTime
+
+  dv.setUint32(p, 0, true); p += 4; // no next IFD
+
+  tiff.set(makeB,  makeOff);
+  tiff.set(modelB, modelOff);
+  tiff.set(dtB,    dtOff);
+
+  // APP1 segment: marker(FF E1) + length(2) + "Exif\0\0"(6) + tiff
+  const dataLen = 2 + 6 + tiffLen; // length field itself + Exif header + tiff
+  const seg = new Uint8Array(2 + dataLen);
+  let a = 0;
+  seg[a++] = 0xFF; seg[a++] = 0xE1;            // APP1 marker
+  seg[a++] = (dataLen >> 8) & 0xFF;
+  seg[a++] =  dataLen       & 0xFF;             // length (big-endian)
+  [0x45, 0x78, 0x69, 0x66, 0x00, 0x00].forEach(b => { seg[a++] = b; }); // "Exif\0\0"
+  tiff.forEach(b => { seg[a++] = b; });
+  return seg;
+}
+
+// Strips real EXIF (canvas already does this) then injects fake one into JPEG bytes
+async function injectExif(jpegBlob, make, model, dateTime) {
+  const src = new Uint8Array(await jpegBlob.arrayBuffer());
+  if (src[0] !== 0xFF || src[1] !== 0xD8) return jpegBlob; // not a JPEG
+
+  // Insert after SOI; if APP0 (JFIF) follows, insert after it
+  let ins = 2;
+  if (src[ins] === 0xFF && src[ins+1] === 0xE0) {
+    ins += 2; // skip marker bytes → now at APP0 length field
+    ins += (src[ins] << 8) | src[ins+1]; // add length (includes itself)
+  }
+
+  const app1 = buildExifApp1(make, model, dateTime);
+  const out  = new Uint8Array(src.length + app1.length);
+  out.set(src.slice(0, ins), 0);
+  out.set(app1, ins);
+  out.set(src.slice(ins), ins + app1.length);
+  return new Blob([out], { type: 'image/jpeg' });
+}
+
+// ── Random file naming ─────────────────────────────────────────────────────
+function randomFileName() {
+  const r4 = () => String(1000 + Math.floor(Math.random() * 9000));
+  const r6 = () => String(100000 + Math.floor(Math.random() * 900000));
+  const r8 = () => String(10000000 + Math.floor(Math.random() * 90000000));
+  const patterns = [
+    () => `IMG_${r4()}`,
+    () => `IMG_E${r4()}`,
+    () => `IMG_${r4()}_HDR`,
+    () => `DSC_${r4()}`,
+    () => `DSC${r4()}`,
+    () => `P_${r8()}_${r6()}`,
+    () => `PHOTO_${r6()}`,
+    () => r8(),
+  ];
+  return patterns[Math.floor(Math.random() * patterns.length)]();
+}
+
+// ── Core transformation ────────────────────────────────────────────────────
+function transformImage(file, s) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      // intensity multiplier: intensity 5 = ×1 (baseline), 1 = ×0.2, 10 = ×2
+      const t = s.intensity / 5;
+
+      // 1. Scale
+      let scale = 1;
+      if (s.resize) {
+        const pct = rand(0.02, 0.04) * t;
+        scale = 1 + rand(-pct, pct);
+      }
+
+      // 2. Rotation
+      let angle = 0;
+      if (s.rotate) {
+        const maxDeg = rand(0.5, 2) * t;
+        angle = rand(-maxDeg, maxDeg) * (Math.PI / 180);
+      }
+
+      // 3. Flip
+      const doFlip = s.flip && Math.random() < 0.5;
+
+      const srcW = img.naturalWidth;
+      const srcH = img.naturalHeight;
+      const dstW = Math.round(srcW * scale);
+      const dstH = Math.round(srcH * scale);
+
+      // Canvas large enough to contain rotated image
+      const absA  = Math.abs(angle);
+      const cW    = Math.ceil(dstW * Math.cos(absA) + dstH * Math.sin(absA));
+      const cH    = Math.ceil(dstW * Math.sin(absA) + dstH * Math.cos(absA));
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = cW;
+      canvas.height = cH;
+      const ctx = canvas.getContext('2d');
+
+      ctx.translate(cW / 2, cH / 2);
+      ctx.rotate(angle);
+      if (doFlip) ctx.scale(-1, 1);
+      ctx.drawImage(img, -dstW / 2, -dstH / 2, dstW, dstH);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      URL.revokeObjectURL(url);
+
+      // 4. Pixel-level: noise, saturation, brightness
+      if (s.noise || s.saturation || s.brightness) {
+        const imageData = ctx.getImageData(0, 0, cW, cH);
+        const data      = imageData.data;
+        const len       = data.length;
+
+        const brightnessAdj = s.brightness ? rand(-0.05, 0.05) * t : 0;
+        const satAdj        = s.saturation ? rand(-0.10, 0.10) * t : 0;
+
+        if (s.brightness || s.saturation) {
+          for (let i = 0; i < len; i += 4) {
+            let r = data[i]   / 255;
+            let g = data[i+1] / 255;
+            let b = data[i+2] / 255;
+
+            if (s.brightness) {
+              r = Math.min(1, Math.max(0, r + brightnessAdj));
+              g = Math.min(1, Math.max(0, g + brightnessAdj));
+              b = Math.min(1, Math.max(0, b + brightnessAdj));
+            }
+
+            if (s.saturation) {
+              const [h, sat, l] = rgbToHsl(r, g, b);
+              [r, g, b] = hslToRgb(h, Math.min(1, Math.max(0, sat + satAdj)), l);
+            }
+
+            data[i]   = Math.round(r * 255);
+            data[i+1] = Math.round(g * 255);
+            data[i+2] = Math.round(b * 255);
+          }
+        }
+
+        if (s.noise) {
+          const noiseAmt = Math.round(rand(5, 20) * t);
+          const nPx      = Math.round((len / 4) * 0.005 * t);
+          for (let n = 0; n < nPx; n++) {
+            const px    = Math.floor(Math.random() * (len / 4)) * 4;
+            data[px]    = clamp(data[px]   + rand(-noiseAmt, noiseAmt));
+            data[px+1]  = clamp(data[px+1] + rand(-noiseAmt, noiseAmt));
+            data[px+2]  = clamp(data[px+2] + rand(-noiseAmt, noiseAmt));
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      // Force JPEG when EXIF injection is enabled (EXIF is JPEG-only)
+      const outType = s.exif ? 'image/jpeg' : (file.type || 'image/jpeg');
+      canvas.toBlob(blob => resolve(blob), outType, 0.92);
+    };
+
+    img.src = url;
+  });
+}
+
+// ── Process & ZIP ──────────────────────────────────────────────────────────
+processBtn.addEventListener('click', async () => {
+  if (files.length === 0) return;
+
+  const settings = getSettings();
+  processBtn.disabled = true;
+  progressWrap.classList.add('visible');
+
+  const zip = new JSZip();
+  const folder = zip.folder('photos_transformees');
+
+  for (let i = 0; i < files.length; i++) {
+    progressFill.style.width  = `${(i / files.length) * 100}%`;
+    progressText.textContent  = `Photo ${i + 1} / ${files.length}…`;
+
+    await new Promise(r => setTimeout(r, 0)); // yield to UI
+
+    let blob = await transformImage(files[i], settings);
+
+    // EXIF: strip real metadata (canvas already does it) + inject fake device/date
+    if (settings.exif) {
+      const dev = randomDevice();
+      blob = await injectExif(blob, dev.make, dev.model, randomExifDate());
+    }
+
+    // Naming: random camera-style or original name
+    const ext  = settings.exif ? 'jpg' : (files[i].name.split('.').pop() || 'jpg').toLowerCase();
+    const base = settings.rename
+      ? randomFileName()
+      : files[i].name.replace(/\.[^.]+$/, '') + `_t${i + 1}`;
+    folder.file(`${base}.${ext}`, blob);
+  }
+
+  progressFill.style.width = '100%';
+  progressText.textContent = 'Création du ZIP…';
+  await new Promise(r => setTimeout(r, 0));
+
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const a       = document.createElement('a');
+  a.href        = URL.createObjectURL(zipBlob);
+  a.download    = `photos_transformees_${Date.now()}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  progressFill.style.width = '0%';
+  progressWrap.classList.remove('visible');
+  progressText.textContent = '';
+  processBtn.disabled = false;
+});
+
+// ── Service Worker ─────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
