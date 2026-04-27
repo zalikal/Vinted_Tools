@@ -395,23 +395,31 @@ function removeFile(idx) {
   processBtn.disabled = files.length === 0;
 }
 
-// Crée une miniature 200px via canvas (évite de charger 5 Mo de base64 par photo)
+// createImageBitmap = API native Android, plus fiable que createObjectURL
 function makeThumbnail(file) {
+  // Méthode 1 : createImageBitmap avec resize natif (Chrome/Samsung Internet moderne)
+  if ('createImageBitmap' in window) {
+    return createImageBitmap(file, { resizeWidth: 200, resizeQuality: 'low' })
+      .then(bitmap => {
+        const c = document.createElement('canvas');
+        c.width  = bitmap.width;
+        c.height = bitmap.height;
+        c.getContext('2d').drawImage(bitmap, 0, 0);
+        bitmap.close();
+        return c.toDataURL('image/jpeg', 0.7);
+      })
+      .catch(() => makeThumbnailFallback(file));
+  }
+  return makeThumbnailFallback(file);
+}
+
+// Fallback : FileReader si createImageBitmap échoue
+function makeThumbnailFallback(file) {
   return new Promise(resolve => {
-    const url = URL.createObjectURL(file);
-    const src = new Image();
-    src.onload = () => {
-      const MAX = 200;
-      const ratio = Math.min(MAX / src.naturalWidth, MAX / src.naturalHeight);
-      const c = document.createElement('canvas');
-      c.width  = Math.round(src.naturalWidth  * ratio);
-      c.height = Math.round(src.naturalHeight * ratio);
-      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.7));
-    };
-    src.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
-    src.src = url;
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
   });
 }
 
