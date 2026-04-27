@@ -1,4 +1,4 @@
-const CACHE = 'photo-transformer-v1';
+const CACHE = 'photo-transformer-v3';
 const PRECACHE = [
   '/',
   '/index.html',
