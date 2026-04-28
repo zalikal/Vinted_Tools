@@ -430,8 +430,31 @@ function makeThumbnailViaImg(file) {
       URL.revokeObjectURL(url);
       resolve({ ok: true, src: c.toDataURL('image/jpeg', 0.7) });
     };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve({ ok: false }); };
+    img.onerror = () => { URL.revokeObjectURL(url); makeThumbnailViaFileReader(file).then(resolve); };
     img.src = url;
+  });
+}
+
+// Méthode 3 : FileReader → DataURL (photos cloud / anciennes sur Android)
+function makeThumbnailViaFileReader(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 200;
+        const ratio = Math.min(MAX / img.naturalWidth, MAX / img.naturalHeight);
+        const c = document.createElement('canvas');
+        c.width  = Math.round(img.naturalWidth  * ratio);
+        c.height = Math.round(img.naturalHeight * ratio);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve({ ok: true, src: c.toDataURL('image/jpeg', 0.7) });
+      };
+      img.onerror = () => resolve({ ok: false });
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve({ ok: false });
+    reader.readAsDataURL(file);
   });
 }
 
@@ -643,91 +666,93 @@ function randomFileName() {
 }
 
 // ── Core transformation ────────────────────────────────────────────────────
+function applyTransform(img, resolve, file, s) {
+  const t = s.intensity / 5;
+
+  let scale = 1;
+  if (s.resize) {
+    const pct = rand(0.02, 0.04) * t;
+    scale = 1 + rand(-pct, pct);
+  }
+
+  let angle = 0;
+  if (s.rotate) {
+    const maxDeg = rand(0.5, 2) * t;
+    angle = rand(-maxDeg, maxDeg) * (Math.PI / 180);
+  }
+
+  const doFlip = s.flip && Math.random() < 0.5;
+
+  const MAX_DIM = 2048;
+  let srcW = img.naturalWidth;
+  let srcH = img.naturalHeight;
+  if (Math.max(srcW, srcH) > MAX_DIM) {
+    const ratio = MAX_DIM / Math.max(srcW, srcH);
+    srcW = Math.round(srcW * ratio);
+    srcH = Math.round(srcH * ratio);
+  }
+  const dstW = Math.round(srcW * scale);
+  const dstH = Math.round(srcH * scale);
+
+  const absA = Math.abs(angle);
+  const cW   = Math.ceil(dstW * Math.cos(absA) + dstH * Math.sin(absA));
+  const cH   = Math.ceil(dstW * Math.sin(absA) + dstH * Math.cos(absA));
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = cW;
+  canvas.height = cH;
+  const ctx = canvas.getContext('2d');
+
+  if (s.brightness || s.saturation) {
+    const bVal = s.brightness ? (1 + rand(-0.05, 0.05) * t).toFixed(3) : '1';
+    const sVal = s.saturation ? (1 + rand(-0.10, 0.10) * t).toFixed(3) : '1';
+    ctx.filter = `brightness(${bVal}) saturate(${sVal})`;
+  }
+
+  ctx.translate(cW / 2, cH / 2);
+  ctx.rotate(angle);
+  if (doFlip) ctx.scale(-1, 1);
+  ctx.drawImage(img, -dstW / 2, -dstH / 2, dstW, dstH);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = 'none';
+
+  if (s.noise) {
+    const imageData = ctx.getImageData(0, 0, cW, cH);
+    const data      = imageData.data;
+    const len       = data.length;
+    const noiseAmt  = Math.round(rand(5, 20) * t);
+    const nPx       = Math.round((len / 4) * 0.005 * t);
+    for (let n = 0; n < nPx; n++) {
+      const px   = Math.floor(Math.random() * (len / 4)) * 4;
+      data[px]   = clamp(data[px]   + rand(-noiseAmt, noiseAmt));
+      data[px+1] = clamp(data[px+1] + rand(-noiseAmt, noiseAmt));
+      data[px+2] = clamp(data[px+2] + rand(-noiseAmt, noiseAmt));
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  const outType = s.exif ? 'image/jpeg' : (file.type || 'image/jpeg');
+  canvas.toBlob(blob => resolve(blob), outType, 0.92);
+}
+
 function transformImage(file, s) {
   return new Promise(resolve => {
-    const img = new Image();
     const url = URL.createObjectURL(file);
-
-    img.onload = () => {
-      // intensity multiplier: intensity 5 = ×1 (baseline), 1 = ×0.2, 10 = ×2
-      const t = s.intensity / 5;
-
-      // 1. Scale
-      let scale = 1;
-      if (s.resize) {
-        const pct = rand(0.02, 0.04) * t;
-        scale = 1 + rand(-pct, pct);
-      }
-
-      // 2. Rotation
-      let angle = 0;
-      if (s.rotate) {
-        const maxDeg = rand(0.5, 2) * t;
-        angle = rand(-maxDeg, maxDeg) * (Math.PI / 180);
-      }
-
-      // 3. Flip
-      const doFlip = s.flip && Math.random() < 0.5;
-
-      // Cap to 2048px max to avoid OOM on mobile (Samsung photos can be 4000×3000)
-      const MAX_DIM = 2048;
-      let srcW = img.naturalWidth;
-      let srcH = img.naturalHeight;
-      if (Math.max(srcW, srcH) > MAX_DIM) {
-        const ratio = MAX_DIM / Math.max(srcW, srcH);
-        srcW = Math.round(srcW * ratio);
-        srcH = Math.round(srcH * ratio);
-      }
-      const dstW = Math.round(srcW * scale);
-      const dstH = Math.round(srcH * scale);
-
-      // Canvas large enough to contain rotated image
-      const absA  = Math.abs(angle);
-      const cW    = Math.ceil(dstW * Math.cos(absA) + dstH * Math.sin(absA));
-      const cH    = Math.ceil(dstW * Math.sin(absA) + dstH * Math.cos(absA));
-
-      const canvas = document.createElement('canvas');
-      canvas.width  = cW;
-      canvas.height = cH;
-      const ctx = canvas.getContext('2d');
-
-      // 4. Brightness + saturation via ctx.filter (GPU, instantané sur mobile)
-      if (s.brightness || s.saturation) {
-        const bVal = s.brightness ? (1 + rand(-0.05, 0.05) * t).toFixed(3) : '1';
-        const sVal = s.saturation ? (1 + rand(-0.10, 0.10) * t).toFixed(3) : '1';
-        ctx.filter = `brightness(${bVal}) saturate(${sVal})`;
-      }
-
-      ctx.translate(cW / 2, cH / 2);
-      ctx.rotate(angle);
-      if (doFlip) ctx.scale(-1, 1);
-      ctx.drawImage(img, -dstW / 2, -dstH / 2, dstW, dstH);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.filter = 'none';
-
+    const img = new Image();
+    img.onload  = () => { URL.revokeObjectURL(url); applyTransform(img, resolve, file, s); };
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-
-      // 5. Bruit RGB via getImageData (uniquement ce qui nécessite les pixels)
-      if (s.noise) {
-        const imageData = ctx.getImageData(0, 0, cW, cH);
-        const data      = imageData.data;
-        const len       = data.length;
-        const noiseAmt  = Math.round(rand(5, 20) * t);
-        const nPx       = Math.round((len / 4) * 0.005 * t);
-        for (let n = 0; n < nPx; n++) {
-          const px   = Math.floor(Math.random() * (len / 4)) * 4;
-          data[px]   = clamp(data[px]   + rand(-noiseAmt, noiseAmt));
-          data[px+1] = clamp(data[px+1] + rand(-noiseAmt, noiseAmt));
-          data[px+2] = clamp(data[px+2] + rand(-noiseAmt, noiseAmt));
-        }
-        ctx.putImageData(imageData, 0, 0);
-      }
-
-      // Force JPEG when EXIF injection is enabled (EXIF is JPEG-only)
-      const outType = s.exif ? 'image/jpeg' : (file.type || 'image/jpeg');
-      canvas.toBlob(blob => resolve(blob), outType, 0.92);
+      // Fallback FileReader pour photos cloud / anciennes sur Android
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img2 = new Image();
+        img2.onload  = () => applyTransform(img2, resolve, file, s);
+        img2.onerror = () => resolve(null);
+        img2.src = e.target.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
     };
-
     img.src = url;
   });
 }
@@ -750,6 +775,12 @@ processBtn.addEventListener('click', async () => {
     await new Promise(r => setTimeout(r, 80)); // yield longer for mobile
 
     let blob = await transformImage(files[i], settings);
+
+    // Fichier cloud non téléchargé → on saute
+    if (!blob) {
+      progressText.textContent = `Photo ${i + 1} ignorée (non accessible)…`;
+      continue;
+    }
 
     // EXIF: strip real metadata (canvas already does it) + inject fake device/date
     if (settings.exif) {
